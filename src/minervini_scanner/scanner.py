@@ -30,6 +30,7 @@ console = Console()
 @dataclass
 class ScannerConfig:
     rs_threshold: float = 70.0
+    min_score: int = 7
     slope_daily: int = 22
     slope_4h: int = 33
 
@@ -144,7 +145,7 @@ class Scanner:
         nine = sum(result.score == 9 for result in results)
         eight = sum(result.score == 8 for result in results)
         seven = sum(result.score == 7 for result in results)
-        shortlisted = sum(result.score >= 8 for result in results)
+        shortlisted = sum(result.score >= self.config.min_score for result in results)
 
         console.print()
         console.rule("[bold green]SCAN COMPLETE[/bold green]")
@@ -154,7 +155,9 @@ class Scanner:
         console.print(f"  [green]9/9 candidates       : {nine:,}[/green]")
         console.print(f"  [green]8/9 candidates       : {eight:,}[/green]")
         console.print(f"  [yellow]7/9 candidates       : {seven:,}[/yellow]")
-        console.print(f"  [bold cyan]Shortlisted (>=8/9) : {shortlisted:,}[/bold cyan]")
+        console.print(
+            f"  [bold cyan]Shortlisted (>={self.config.min_score}/9) : {shortlisted:,}[/bold cyan]"
+        )
         console.print()
         return results
 
