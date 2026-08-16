@@ -12,7 +12,7 @@ permissions:
   contents: write
 
 jobs:
-  weekly-scan:
+  daily-scan:
     runs-on: ubuntu-latest
 
     steps:
