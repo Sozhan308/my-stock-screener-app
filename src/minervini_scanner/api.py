@@ -6,8 +6,11 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .config import get_settings
 from .models import Timeframe
+from .watchlist import WatchlistStore
 
 settings = get_settings()
+
+watchlist_store = WatchlistStore(settings.watchlist_db)
 
 app = FastAPI(
     title="Minervini NSE Scanner API",
@@ -92,3 +95,40 @@ def stock(
             return row
 
     raise HTTPException(status_code=404, detail=f"{symbol} not found")
+
+
+@app.get("/api/watchlist")
+def get_watchlist() -> dict:
+    return {
+        "symbols": watchlist_store.list_symbols(),
+    }
+
+
+@app.post("/api/watchlist/{symbol}")
+def add_to_watchlist(symbol: str) -> dict:
+    symbol = symbol.upper().strip()
+
+    if not symbol:
+        raise HTTPException(
+            status_code=400,
+            detail="Symbol is required",
+        )
+
+    watchlist_store.add(symbol)
+
+    return {
+        "symbol": symbol,
+        "saved": True,
+    }
+
+
+@app.delete("/api/watchlist/{symbol}")
+def remove_from_watchlist(symbol: str) -> dict:
+    symbol = symbol.upper().strip()
+
+    watchlist_store.remove(symbol)
+
+    return {
+        "symbol": symbol,
+        "saved": False,
+    }

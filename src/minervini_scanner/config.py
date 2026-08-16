@@ -7,6 +7,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     data_dir: Path = Path("data/cache")
     output_dir: Path = Path("output")
+    watchlist_db: Path = Path("data/watchlist.db")
     default_timeframe: str = "daily"
     rs_threshold: float = 70.0
     min_score: int = 7
@@ -21,6 +22,7 @@ class Settings(BaseSettings):
     def ensure_directories(self) -> None:
         self.data_dir.mkdir(parents=True, exist_ok=True)
         self.output_dir.mkdir(parents=True, exist_ok=True)
+        self.watchlist_db.parent.mkdir(parents=True, exist_ok=True)
 
 
 @lru_cache

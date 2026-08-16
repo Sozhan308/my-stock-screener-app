@@ -57,27 +57,42 @@ function App() {
   const [stocks, setStocks] = useState<Stock[]>([]);
   const [loading, setLoading] = useState(false);
   const [selected, setSelected] = useState<Stock | null>(null);
-  const [watchlist, setWatchlist] = useState<string[]>(() => {
-    try {
-      return JSON.parse(localStorage.getItem("minervini-watchlist") || "[]");
-    } catch {
-      return [];
-    }
-  });
+  const [watchlist, setWatchlist] = useState<string[]>([]);
 
   const [showWatchlist, setShowWatchlist] = useState(false);
 
-  function toggleWatchlist(symbol: string) {
-    setWatchlist((current) => {
-      const updated = current.includes(symbol)
-        ? current.filter((item) => item !== symbol)
-        : [...current, symbol];
+  async function loadWatchlist() {
+    const response = await fetch(`${API}/watchlist`);
 
-      localStorage.setItem("minervini-watchlist", JSON.stringify(updated));
+    if (!response.ok) {
+      throw new Error("Failed to load watchlist");
+    }
 
-      return updated;
-    });
+    const data = await response.json();
+    setWatchlist(data.symbols);
   }
+
+  async function toggleWatchlist(symbol: string) {
+    const isSaved = watchlist.includes(symbol);
+
+    const response = await fetch(
+      `${API}/watchlist/${encodeURIComponent(symbol)}`,
+      {
+        method: isSaved ? "DELETE" : "POST",
+      },
+    );
+
+    if (!response.ok) {
+      throw new Error("Failed to update watchlist");
+    }
+
+    setWatchlist((current) =>
+      isSaved
+        ? current.filter((item) => item !== symbol)
+        : [...current, symbol],
+    );
+  }
+
   async function loadStocks() {
     setLoading(true);
     try {
@@ -102,6 +117,10 @@ function App() {
   useEffect(() => {
     void loadStocks();
   }, [timeframe, minScore, minRS]);
+
+  useEffect(() => {
+    void loadWatchlist();
+  }, []);
 
   const stats = useMemo(() => {
     const nine = stocks.filter((s) => s.Score === 9).length;
