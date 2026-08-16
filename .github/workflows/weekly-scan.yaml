@@ -1,0 +1,62 @@
+name: Weekly Market Scan
+
+on:
+  schedule:
+    # Friday 18:00 IST = Friday 12:30 UTC
+    - cron: "30 12 * * 5"
+
+  # Allows manual execution from GitHub Actions
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  weekly-scan:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install 3.12
+
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Run weekly market scan
+        run: uv run minervini update
+
+      - name: Check generated output
+        run: |
+          test -s output/minervini_daily.csv
+          test -s output/minervini_4h.csv
+
+          echo "Generated files:"
+          ls -lh output/
+
+      - name: Commit updated scan results
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add output/minervini_daily.csv
+          git add output/minervini_daily.xlsx
+          git add output/minervini_4h.csv
+          git add output/minervini_4h.xlsx
+
+          if git diff --cached --quiet; then
+            echo "No scan result changes to commit."
+            exit 0
+          fi
+
+          git commit -m "chore: update weekly market scan"
+          git push
