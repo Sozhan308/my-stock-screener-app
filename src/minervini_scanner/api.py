@@ -1,0 +1,100 @@
+from __future__ import annotations
+
+from pathlib import Path
+
+import pandas as pd
+from fastapi import FastAPI, HTTPException, Query
+from fastapi.middleware.cors import CORSMiddleware
+
+from .config import get_settings
+from .models import Timeframe
+
+settings = get_settings()
+
+app = FastAPI(
+    title="Minervini NSE Scanner API",
+    version="0.2.0",
+    description="REST API for the Minervini NSE stock scanner.",
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+def _load(timeframe: Timeframe) -> list[dict]:
+    path = settings.output_dir / f"minervini_{timeframe.value}.csv"
+
+    if not path.exists():
+        return []
+
+    df = pd.read_csv(path)
+
+    # Convert NumPy/Pandas values into JSON-safe Python values.
+    records = df.where(pd.notna(df), None).to_dict(orient="records")
+
+    for record in records:
+        for key, value in list(record.items()):
+            if isinstance(value, bool):
+                continue
+            if isinstance(value, (int, float)):
+                continue
+            if hasattr(value, "item"):
+                record[key] = value.item()
+
+    return records
+
+
+@app.get("/api/health")
+def health() -> dict:
+    return {"status": "ok"}
+
+
+@app.get("/api/stocks")
+def stocks(
+    timeframe: Timeframe = Query(Timeframe.DAILY),
+    min_score: int = Query(7, ge=0, le=9),
+    min_rs: float = Query(70, ge=0, le=100),
+    search: str | None = Query(None),
+) -> dict:
+    rows = _load(timeframe)
+
+    if search:
+        search_upper = search.upper().strip()
+        rows = [
+            row
+            for row in rows
+            if search_upper in str(row.get("Symbol", "")).upper()
+        ]
+
+    rows = [
+        row
+        for row in rows
+        if float(row.get("Score", 0) or 0) >= min_score
+        and float(row.get("RS Rating", 0) or 0) >= min_rs
+    ]
+
+    return {
+        "timeframe": timeframe.value,
+        "count": len(rows),
+        "stocks": rows,
+    }
+
+
+@app.get("/api/stocks/{symbol}")
+def stock(
+    symbol: str,
+    timeframe: Timeframe = Query(Timeframe.DAILY),
+) -> dict:
+    rows = _load(timeframe)
+    symbol = symbol.upper()
+
+    for row in rows:
+        if row.get("Symbol") == symbol:
+            return row
+
+    raise HTTPException(status_code=404, detail=f"{symbol} not found")

@@ -1,0 +1,374 @@
+--- a/frontend/src/App.tsx
++++ b/frontend/src/App.tsx
+@@ -1,5 +1,5 @@
+ import { useEffect, useMemo, useState } from "react";
+-import { ExternalLink, Search, RefreshCw, SlidersHorizontal } from "lucide-react";
++import { ExternalLink, Search, RefreshCw, SlidersHorizontal, Star, X } from "lucide-react";
+ 
+ type Timeframe = "daily" | "4h";
+ 
+@@ -45,20 +45,30 @@
+ 
+ function App() {
+   const [timeframe, setTimeframe] = useState<Timeframe>("daily");
+-  const [minScore, setMinScore] = useState(8);
++  const [minScore, setMinScore] = useState(7);
+   const [minRS, setMinRS] = useState(70);
+   const [search, setSearch] = useState("");
+   const [stocks, setStocks] = useState<Stock[]>([]);
+   const [loading, setLoading] = useState(false);
+   const [selected, setSelected] = useState<Stock | null>(null);
++  const [watchlist, setWatchlist] = useState<string[]>(() => {
++    try {
++      return JSON.parse(localStorage.getItem("minervini-watchlist") ?? "[]");
++    } catch {
++      return [];
++    }
++  });
++  const [view, setView] = useState<"candidates" | "watchlist">("candidates");
+ 
+   async function loadStocks() {
+     setLoading(true);
+     try {
+       const params = new URLSearchParams({
+         timeframe,
+-        min_score: String(minScore),
+-        min_rs: String(minRS),
++        // Watchlist view loads the complete scanned result set so a saved
++        // symbol is not hidden by the candidate filters.
++        min_score: view === "watchlist" ? "0" : String(minScore),
++        min_rs: view === "watchlist" ? "0" : String(minRS),
+       });
+ 
+       if (search.trim()) params.set("search", search.trim());
+@@ -75,17 +85,30 @@
+ 
+   useEffect(() => {
+     void loadStocks();
+-  }, [timeframe, minScore, minRS]);
++  }, [timeframe, minScore, minRS, view]);
++
++  useEffect(() => {
++    localStorage.setItem("minervini-watchlist", JSON.stringify(watchlist));
++  }, [watchlist]);
++
++  function toggleWatchlist(symbol: string) {
++    setWatchlist((current) =>
++      current.includes(symbol)
++        ? current.filter((item) => item !== symbol)
++        : [...current, symbol],
++    );
++  }
+ 
+   const stats = useMemo(() => {
+     const nine = stocks.filter((s) => s.Score === 9).length;
+     const eight = stocks.filter((s) => s.Score === 8).length;
++    const seven = stocks.filter((s) => s.Score === 7).length;
+     const avgRS =
+       stocks.length > 0
+         ? stocks.reduce((sum, s) => sum + s["RS Rating"], 0) / stocks.length
+         : 0;
+ 
+-    return { nine, eight, avgRS };
++    return { nine, eight, seven, avgRS };
+   }, [stocks]);
+ 
+   return (
+@@ -123,7 +146,7 @@
+           <SlidersHorizontal size={15} />
+           Minimum score
+           <select value={minScore} onChange={(e) => setMinScore(Number(e.target.value))}>
+-            {[9, 8, 7, 6, 5].map((n) => (
++            {[9, 8, 7].map((n) => (
+               <option key={n} value={n}>{n}/9</option>
+             ))}
+           </select>
+@@ -155,7 +178,7 @@
+ 
+       <section className="stats">
+         <div className="stat">
+-          <span>Shortlisted</span>
++          <span>Shortlisted ≥7/9</span>
+           <strong>{stocks.length}</strong>
+         </div>
+         <div className="stat">
+@@ -167,6 +190,14 @@
+           <strong>{stats.eight}</strong>
+         </div>
+         <div className="stat">
++          <span>7 / 9</span>
++          <strong>{stats.seven}</strong>
++        </div>
++        <div className="stat">
++          <span>Watchlist</span>
++          <strong>{watchlist.length}</strong>
++        </div>
++        <div className="stat">
+           <span>Average RS</span>
+           <strong>{format(stats.avgRS, 1)}</strong>
+         </div>
+@@ -175,19 +206,36 @@
+       <main className="table-card">
+         <div className="table-header">
+           <div>
+-            <h2>Shortlisted stocks</h2>
+-            <span>{timeframe === "daily" ? "Daily candles" : "4-hour candles"}</span>
++            <div className="table-title-row">
++              <div>
++                <h2>{view === "candidates" ? "Shortlisted stocks" : "My watchlist"}</h2>
++                <span>{timeframe === "daily" ? "Daily candles" : "4-hour candles"}</span>
++              </div>
++              <div className="view-tabs">
++                <button className={view === "candidates" ? "active" : ""} onClick={() => setView("candidates")}>
++                  Candidates
++                </button>
++                <button className={view === "watchlist" ? "active" : ""} onClick={() => setView("watchlist")}>
++                  <Star size={14} /> Watchlist ({watchlist.length})
++                </button>
++              </div>
++            </div>
+           </div>
+         </div>
+ 
+         {loading ? (
+           <div className="empty">Loading scanner results...</div>
+-        ) : stocks.length === 0 ? (
++        ) : view === "candidates" && stocks.length === 0 ? (
+           <div className="empty">
+             No stocks match the current filters. Run the scanner first.
+           </div>
+         ) : (
+           <div className="table-scroll">
++            {view === "watchlist" && watchlist.length === 0 ? (
++              <div className="empty">
++                Your watchlist is empty. Open a candidate and add it with the star button.
++              </div>
++            ) : (
+             <table>
+               <thead>
+                 <tr>
+@@ -206,7 +254,9 @@
+                 </tr>
+               </thead>
+               <tbody>
+-                {stocks.map((stock) => (
++                {stocks
++                  .filter((stock) => view === "candidates" || watchlist.includes(stock.Symbol))
++                  .map((stock) => (
+                   <tr key={stock.Symbol}>
+                     <td>
+                       <button className="symbol" onClick={() => setSelected(stock)}>
+@@ -246,8 +296,12 @@
+                     </td>
+                   </tr>
+                 ))}
++                {view === "watchlist" && stocks.filter((stock) => watchlist.includes(stock.Symbol)).length === 0 && (
++                  <tr><td colSpan={12}><div className="empty">Run a scan for the current timeframe to load your saved watchlist stocks.</div></td></tr>
++                )}
+               </tbody>
+             </table>
++            )}
+           </div>
+         )}
+       </main>
+@@ -257,10 +311,20 @@
+           <div className="modal" onClick={(e) => e.stopPropagation()}>
+             <div className="modal-top">
+               <div>
+-                <div className="eyebrow">MINERVINI CHECKLIST</div>
++                <div className="eyebrow">MINERVINI CANDIDATE</div>
+                 <h2>{selected.Symbol}</h2>
++                <span className="modal-subtitle">{timeframe === "daily" ? "Daily" : "4H"} · Trend Template qualified</span>
++              </div>
++              <div className="modal-actions">
++                <button
++                  className={`icon-button ${watchlist.includes(selected.Symbol) ? "starred" : ""}`}
++                  title={watchlist.includes(selected.Symbol) ? "Remove from watchlist" : "Add to watchlist"}
++                  onClick={() => toggleWatchlist(selected.Symbol)}
++                >
++                  <Star size={18} fill={watchlist.includes(selected.Symbol) ? "currentColor" : "none"} />
++                </button>
++                <button className="close" onClick={() => setSelected(null)}><X size={18} /></button>
+               </div>
+-              <button className="close" onClick={() => setSelected(null)}>×</button>
+             </div>
+ 
+             <div className="detail-grid">
+@@ -269,6 +333,21 @@
+               <div><span>Score</span><strong>{selected.Score}/9</strong></div>
+             </div>
+ 
++            <div className="structure-grid">
++              <div><span>MA50</span><strong>₹{format(selected.MA50)}</strong></div>
++              <div><span>MA150</span><strong>₹{format(selected.MA150)}</strong></div>
++              <div><span>MA200</span><strong>₹{format(selected.MA200)}</strong></div>
++              <div><span>200MA slope</span><strong>{format(selected["MA200 slope %"])}%</strong></div>
++              <div><span>52W low</span><strong>+{format(selected["% Above 52W Low"], 1)}%</strong></div>
++              <div><span>52W high</span><strong>-{format(selected["% Below 52W High"], 1)}%</strong></div>
++            </div>
++
++            <div className="setup-note">
++              <div className="eyebrow">CURRENT STATUS</div>
++              <strong>Trend candidate</strong>
++              <span>Passes the configured 7/9+ Minervini screening threshold. Setup detection comes next.</span>
++            </div>
++
+             <div className="checklist">
+               {[
+                 ["Price > MA50", selected["P > MA50"]],
+@@ -288,9 +367,15 @@
+               ))}
+             </div>
+ 
+-            <a className="chart-button" href={selected.TradingView} target="_blank" rel="noreferrer">
+-              Open TradingView <ExternalLink size={16} />
+-            </a>
++            <div className="modal-footer">
++              <button className="watch-button" onClick={() => toggleWatchlist(selected.Symbol)}>
++                <Star size={16} fill={watchlist.includes(selected.Symbol) ? "currentColor" : "none"} />
++                {watchlist.includes(selected.Symbol) ? "Remove from Watchlist" : "Add to Watchlist"}
++              </button>
++              <a className="chart-button" href={selected.TradingView} target="_blank" rel="noreferrer">
++                Open TradingView <ExternalLink size={16} />
++              </a>
++            </div>
+           </div>
+         </div>
+       )}
+--- a/frontend/src/styles.css
++++ b/frontend/src/styles.css
+@@ -397,3 +397,134 @@
+ @keyframes spin {
+   to { transform: rotate(360deg); }
+ }
++
++/* Candidate detail + watchlist additions */
++.table-title-row {
++  display: flex;
++  justify-content: space-between;
++  align-items: center;
++  gap: 16px;
++}
++
++.view-tabs {
++  display: flex;
++  gap: 4px;
++  padding: 3px;
++  border: 1px solid #29313b;
++  border-radius: 8px;
++  background: #0f141b;
++}
++
++.view-tabs button {
++  display: inline-flex;
++  align-items: center;
++  gap: 5px;
++  border: 0;
++  border-radius: 6px;
++  padding: 7px 10px;
++  color: #7d8996;
++  background: transparent;
++  cursor: pointer;
++}
++
++.view-tabs button.active {
++  color: #fff;
++  background: #263241;
++}
++
++.modal-actions {
++  display: flex;
++  gap: 7px;
++}
++
++.icon-button {
++  width: 34px;
++  height: 34px;
++  display: inline-flex;
++  align-items: center;
++  justify-content: center;
++  border: 1px solid #29313b;
++  border-radius: 8px;
++  color: #9aa5b1;
++  background: #121821;
++  cursor: pointer;
++}
++
++.icon-button.starred {
++  color: #e3b341;
++}
++
++.modal-subtitle {
++  display: block;
++  margin-top: 3px;
++  color: #7d8996;
++  font-size: 12px;
++}
++
++.structure-grid {
++  display: grid;
++  grid-template-columns: repeat(3, 1fr);
++  gap: 7px;
++  margin-bottom: 16px;
++}
++
++.structure-grid div {
++  padding: 10px 11px;
++  border: 1px solid #29313b;
++  border-radius: 8px;
++  background: #0e141b;
++}
++
++.structure-grid span {
++  display: block;
++  color: #7d8996;
++  font-size: 10px;
++}
++
++.structure-grid strong {
++  display: block;
++  margin-top: 3px;
++  font-size: 13px;
++}
++
++.setup-note {
++  display: grid;
++  gap: 3px;
++  margin-bottom: 16px;
++  padding: 12px;
++  border: 1px solid #29313b;
++  border-radius: 8px;
++  background: #101821;
++}
++
++.setup-note strong {
++  font-size: 14px;
++}
++
++.setup-note span {
++  color: #7d8996;
++  font-size: 11px;
++}
++
++.modal-footer {
++  display: grid;
++  grid-template-columns: 1fr 1fr;
++  gap: 8px;
++}
++
++.watch-button {
++  display: flex;
++  align-items: center;
++  justify-content: center;
++  gap: 7px;
++  padding: 11px;
++  border: 1px solid #29313b;
++  border-radius: 8px;
++  color: #d8dee6;
++  background: #121821;
++  cursor: pointer;
++}
++
++.watch-button:hover {
++  background: #19212c;
++}

@@ -216,3 +216,12 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+.DS_Store
+.env
+node_modules/
+dist/
+output/
+data/cache/
+nse_symbols.csv
+__pycache__/

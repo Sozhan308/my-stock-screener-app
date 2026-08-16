@@ -1,0 +1,50 @@
+[project]
+name = "my-stock-screener-app"
+version = "0.1.0"
+description = "NSE Minervini Trend Template scanner with Daily and 4H analysis, FastAPI API, and React UI."
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "MIT" }
+authors = [{ name = "Sozhan" }]
+dependencies = [
+    "fastapi>=0.116,<1.0",
+    "jinja2>=3.1,<4.0",
+    "numpy>=2.2,<3.0",
+    "openpyxl>=3.1,<4.0",
+    "pandas>=2.2,<3.0",
+    "pydantic-settings>=2.10,<3.0",
+    "rich>=14.1,<15.0",
+    "typer>=0.16,<1.0",
+    "uvicorn[standard]>=0.35,<1.0",
+    "yfinance>=0.2.65,<0.3",
+]
+
+[project.optional-dependencies]
+dev = [
+    "httpx>=0.28,<1.0",
+    "pytest>=8.4,<9.0",
+    "pytest-cov>=6.2,<7.0",
+    "ruff>=0.12,<1.0",
+]
+
+[project.scripts]
+minervini = "minervini_scanner.cli:app"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/minervini_scanner"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
