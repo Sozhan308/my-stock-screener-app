@@ -30,11 +30,8 @@ def weighted_momentum_score(df: pd.DataFrame) -> float:
     periods = (63, 126, 189, 252)
     weights = (0.20, 0.20, 0.20, 0.40)
 
-    returns = [
-        current / float(close.iloc[-period]) - 1
-        for period in periods
-    ]
-    return float(sum(ret * weight for ret, weight in zip(returns, weights)))
+    returns = [current / float(close.iloc[-period]) - 1 for period in periods]
+    return float(sum(ret * weight for ret, weight in zip(returns, weights, strict=True)))
 
 
 def percentile_ratings(raw_scores: dict[str, float]) -> dict[str, float]:

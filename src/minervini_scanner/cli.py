@@ -13,7 +13,7 @@ app = typer.Typer(help="Minervini NSE scanner.")
 @app.command()
 def scan(
     timeframe: str = typer.Option("daily", "--timeframe", "-t"),
-    symbols_file: Path = typer.Option(
+    symbols_file: Path = typer.Option(  # noqa: B008
         Path("nse_symbols.csv"),
         "--symbols-file",
     ),
@@ -42,11 +42,7 @@ def scan(
         selected,
     )
 
-    shortlisted = [
-        result
-        for result in results
-        if result.score >= settings.min_score
-    ]
+    shortlisted = [result for result in results if result.score >= settings.min_score]
 
     typer.echo(f"Universe: {len(symbols)}")
     typer.echo(f"Valid results: {len(results)}")

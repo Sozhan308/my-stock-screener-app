@@ -5,10 +5,22 @@ from pathlib import Path
 
 import pandas as pd
 from rich.console import Console
-from rich.progress import BarColumn, MofNCompleteColumn, Progress, SpinnerColumn, TextColumn, TimeRemainingColumn
+from rich.progress import (
+    BarColumn,
+    MofNCompleteColumn,
+    Progress,
+    SpinnerColumn,
+    TextColumn,
+    TimeRemainingColumn,
+)
 
-from .data import YahooFinanceProvider, load_symbols, resample_to_4h
-from .indicators import daily_52_week_levels, moving_averages, percentile_ratings, weighted_momentum_score
+from .data import YahooFinanceProvider, resample_to_4h
+from .indicators import (
+    daily_52_week_levels,
+    moving_averages,
+    percentile_ratings,
+    weighted_momentum_score,
+)
 from .models import ScanResult, Timeframe
 from .rules import build_result_frame
 
@@ -87,9 +99,7 @@ class Scanner:
         ratings = percentile_ratings({symbol: raw_rs for symbol, _, _, raw_rs in raw})
 
         slope_periods = (
-            self.config.slope_daily
-            if timeframe is Timeframe.DAILY
-            else self.config.slope_4h
+            self.config.slope_daily if timeframe is Timeframe.DAILY else self.config.slope_4h
         )
 
         results: list[ScanResult] = []
@@ -104,15 +114,28 @@ class Scanner:
             task = progress.add_task("[cyan]Applying Minervini rules", total=len(raw))
             for symbol, tf, daily, _ in raw:
                 rs_rating = ratings.get(symbol, 0.0)
-                result = build_result_frame(tf, daily, rs_rating, self.config.rs_threshold, slope_periods)
+                result = build_result_frame(
+                    tf,
+                    daily,
+                    rs_rating,
+                    self.config.rs_threshold,
+                    slope_periods,
+                )
                 results.append(
                     ScanResult(
-                        symbol=symbol, price=result["price"], ma50=result["ma50"],
-                        ma150=result["ma150"], ma200=result["ma200"],
-                        ma200_slope_pct=result["ma200_slope_pct"], high_52w=result["high_52w"],
-                        low_52w=result["low_52w"], pct_above_52w_low=result["pct_above_52w_low"],
-                        pct_below_52w_high=result["pct_below_52w_high"], rs_rating=rs_rating,
-                        checklist=result["checklist"], timeframe=timeframe,
+                        symbol=symbol,
+                        price=result["price"],
+                        ma50=result["ma50"],
+                        ma150=result["ma150"],
+                        ma200=result["ma200"],
+                        ma200_slope_pct=result["ma200_slope_pct"],
+                        high_52w=result["high_52w"],
+                        low_52w=result["low_52w"],
+                        pct_above_52w_low=result["pct_above_52w_low"],
+                        pct_below_52w_high=result["pct_below_52w_high"],
+                        rs_rating=rs_rating,
+                        checklist=result["checklist"],
+                        timeframe=timeframe,
                     )
                 )
                 progress.advance(task)
@@ -134,7 +157,6 @@ class Scanner:
         console.print(f"  [bold cyan]Shortlisted (>=8/9) : {shortlisted:,}[/bold cyan]")
         console.print()
         return results
-
 
 
 def results_to_frame(results: list[ScanResult]) -> pd.DataFrame:

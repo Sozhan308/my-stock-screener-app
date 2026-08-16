@@ -16,15 +16,7 @@ def load_symbols(path: Path) -> list[str]:
     if column is None:
         raise ValueError("Symbol CSV must contain a SYMBOL column")
 
-    return (
-        df[column]
-        .dropna()
-        .astype(str)
-        .str.strip()
-        .str.upper()
-        .drop_duplicates()
-        .tolist()
-    )
+    return df[column].dropna().astype(str).str.strip().str.upper().drop_duplicates().tolist()
 
 
 class YahooFinanceProvider:
@@ -61,9 +53,7 @@ class YahooFinanceProvider:
         if isinstance(df.columns, pd.MultiIndex):
             df.columns = df.columns.get_level_values(0)
 
-        return df[["Open", "High", "Low", "Close", "Volume"]].dropna(
-            subset=["Close"]
-        )
+        return df[["Open", "High", "Low", "Close", "Volume"]].dropna(subset=["Close"])
 
 
 def resample_to_4h(hourly: pd.DataFrame) -> pd.DataFrame:
@@ -96,7 +86,4 @@ def resample_to_4h(hourly: pd.DataFrame) -> pd.DataFrame:
         .dropna(subset=["Open", "High", "Low", "Close"])
     )
 
-    return result[
-        (result.index.hour >= 9)
-        & (result.index.hour <= 13)
-    ]
+    return result[(result.index.hour >= 9) & (result.index.hour <= 13)]

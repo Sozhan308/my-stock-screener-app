@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from pathlib import Path
-
 import pandas as pd
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
@@ -56,20 +54,16 @@ def health() -> dict:
 
 @app.get("/api/stocks")
 def stocks(
-    timeframe: Timeframe = Query(Timeframe.DAILY),
-    min_score: int = Query(7, ge=0, le=9),
-    min_rs: float = Query(70, ge=0, le=100),
+    timeframe: Timeframe = Query(Timeframe.DAILY),  # noqa: B008
+    min_score: int = Query(7, ge=0, le=9),  # noqa: B008
+    min_rs: float = Query(70, ge=0, le=100),  # noqa: B008
     search: str | None = Query(None),
 ) -> dict:
     rows = _load(timeframe)
 
     if search:
         search_upper = search.upper().strip()
-        rows = [
-            row
-            for row in rows
-            if search_upper in str(row.get("Symbol", "")).upper()
-        ]
+        rows = [row for row in rows if search_upper in str(row.get("Symbol", "")).upper()]
 
     rows = [
         row
@@ -88,7 +82,7 @@ def stocks(
 @app.get("/api/stocks/{symbol}")
 def stock(
     symbol: str,
-    timeframe: Timeframe = Query(Timeframe.DAILY),
+    timeframe: Timeframe = Query(Timeframe.DAILY),  # noqa: B008
 ) -> dict:
     rows = _load(timeframe)
     symbol = symbol.upper()
