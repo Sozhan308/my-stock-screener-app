@@ -66,9 +66,16 @@ class Scanner:
             TimeRemainingColumn(),
             console=console,
         ) as progress:
-            task = progress.add_task("[cyan]Downloading market data", total=len(symbols))
+            task = progress.add_task(
+                "[cyan]Downloading market data",
+                total=len(symbols),
+            )
             for symbol in symbols:
                 try:
+                    progress.update(
+                        task,
+                        description=f"[cyan]Downloading {symbol}",
+                    )
                     daily = self.provider.daily(symbol)
                     if len(daily) < 252:
                         skipped += 1
