@@ -1,9 +1,9 @@
-name: Weekly Market Scan
+name: Stock Market Scan
 
 on:
   schedule:
-    # Friday 18:00 IST = Friday 12:30 UTC
-    - cron: "30 12 * * 5"
+    # Every day at 18:00 IST = 12:30 UTC
+    - cron: "30 12 * * *"
 
   # Allows manual execution from GitHub Actions
   workflow_dispatch:
