@@ -219,7 +219,7 @@ __marimo__/
 
 .DS_Store
 .env
-node_modules/
+**/node_modules/
 dist/
 data/cache/
 nse_symbols.csv
