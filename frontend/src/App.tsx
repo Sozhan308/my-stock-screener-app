@@ -97,6 +97,90 @@ const SETUP_RULES: Record<Timeframe, string[]> = {
   ],
 };
 
+type SortKey = "setupScore" | "risk" | "fromPivot" | "rs" | "trend";
+
+// `first` is the direction of the first click: best value on top.
+const SORT_COLUMNS: Record<SortKey, { field: keyof Stock; first: "asc" | "desc" }> = {
+  setupScore: { field: "Setup Score", first: "desc" },
+  risk: { field: "Risk %", first: "asc" },
+  fromPivot: { field: "% From Pivot", first: "desc" },
+  rs: { field: "RS Rating", first: "desc" },
+  trend: { field: "Score", first: "desc" },
+};
+
+const STAGE_ORDER = ["Breakout", "Ready", "Recent breakout", "Forming", "Extended", "Failed"];
+
+function countBy(stocks: Stock[], pick: (stock: Stock) => string | null) {
+  const counts: Record<string, number> = {};
+  for (const stock of stocks) {
+    const key = pick(stock);
+    if (key) counts[key] = (counts[key] ?? 0) + 1;
+  }
+  return counts;
+}
+
+function toggleValue(list: string[], value: string) {
+  return list.includes(value) ? list.filter((item) => item !== value) : [...list, value];
+}
+
+function FilterChips({
+  label,
+  options,
+  counts,
+  selected,
+  onToggle,
+}: {
+  label: string;
+  options: string[];
+  counts: Record<string, number>;
+  selected: string[];
+  onToggle: (value: string) => void;
+}) {
+  const present = options.filter((option) => counts[option] || selected.includes(option));
+  if (present.length === 0) return null;
+  return (
+    <div className="filter-group">
+      <span className="filter-label">{label}</span>
+      {present.map((option) => (
+        <button
+          key={option}
+          className={`chip ${selected.includes(option) ? "active" : ""}`}
+          onClick={() => onToggle(option)}
+        >
+          {option} <em>{counts[option] ?? 0}</em>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function SortHeader({
+  label,
+  sortKey,
+  sort,
+  onSort,
+}: {
+  label: string;
+  sortKey: SortKey;
+  sort: { key: SortKey; dir: "asc" | "desc" } | null;
+  onSort: (key: SortKey) => void;
+}) {
+  const active = sort?.key === sortKey;
+  return (
+    <th
+      className="sortable"
+      aria-sort={active ? (sort.dir === "asc" ? "ascending" : "descending") : "none"}
+    >
+      <button onClick={() => onSort(sortKey)} title={`Sort by ${label.toLowerCase()}`}>
+        {label}
+        <span className={active ? "arrow on" : "arrow"}>
+          {active ? (sort.dir === "asc" ? "▲" : "▼") : "↕"}
+        </span>
+      </button>
+    </th>
+  );
+}
+
 function HourlyTag({ stock }: { stock: Stock }) {
   const stage = stock["1H Stage"];
   if (!stage || !ACTIONABLE.includes(stage)) return null;
@@ -161,6 +245,11 @@ function App() {
   const [minSetupScore, setMinSetupScore] = useState(0);
   const [liquidOnly, setLiquidOnly] = useState(true);
   const [search, setSearch] = useState("");
+  const [stageFilter, setStageFilter] = useState<string[]>([]);
+  const [setupFilter, setSetupFilter] = useState<string[]>([]);
+  const [entryFilter, setEntryFilter] = useState<string[]>([]);
+  const [shakeoutOnly, setShakeoutOnly] = useState(false);
+  const [sort, setSort] = useState<{ key: SortKey; dir: "asc" | "desc" } | null>(null);
   const [stocks, setStocks] = useState<Stock[]>([]);
   const [loading, setLoading] = useState(false);
   const [selected, setSelected] = useState<Stock | null>(null);
@@ -241,6 +330,59 @@ function App() {
   const visibleStocks = showWatchlist
     ? stocks.filter((stock) => watchlist.includes(stock.Symbol))
     : stocks;
+
+  const stageCounts = useMemo(() => countBy(visibleStocks, (s) => s.Stage), [visibleStocks]);
+  const setupCounts = useMemo(() => countBy(visibleStocks, (s) => s.Setup), [visibleStocks]);
+  const entryCounts = useMemo(() => countBy(visibleStocks, (s) => s["Entry Zone"]), [visibleStocks]);
+  const shakeoutCount = useMemo(
+    () => visibleStocks.filter((s) => s.Shakeout).length,
+    [visibleStocks],
+  );
+
+  const tableStocks = useMemo(() => {
+    const matches = (selected: string[], value: string | null) =>
+      selected.length === 0 || (value != null && selected.includes(value));
+
+    const rows = visibleStocks.filter(
+      (s) =>
+        matches(stageFilter, s.Stage) &&
+        matches(setupFilter, s.Setup) &&
+        matches(entryFilter, s["Entry Zone"]) &&
+        (!shakeoutOnly || Boolean(s.Shakeout)),
+    );
+    if (!sort) return rows;
+
+    const column = SORT_COLUMNS[sort.key].field;
+    const direction = sort.dir === "asc" ? 1 : -1;
+    // Rows without a value always sink to the bottom.
+    return [...rows].sort((a, b) => {
+      const x = a[column] as number | null;
+      const y = b[column] as number | null;
+      if (x == null && y == null) return 0;
+      if (x == null) return 1;
+      if (y == null) return -1;
+      return (x - y) * direction;
+    });
+  }, [visibleStocks, stageFilter, setupFilter, entryFilter, shakeoutOnly, sort]);
+
+  const filtersActive =
+    stageFilter.length + setupFilter.length + entryFilter.length > 0 || shakeoutOnly;
+
+  function clearFilters() {
+    setStageFilter([]);
+    setSetupFilter([]);
+    setEntryFilter([]);
+    setShakeoutOnly(false);
+  }
+
+  function toggleSort(key: SortKey) {
+    setSort((current) => {
+      const first = SORT_COLUMNS[key].first;
+      if (!current || current.key !== key) return { key, dir: first };
+      if (current.dir === first) return { key, dir: first === "asc" ? "desc" : "asc" };
+      return null;
+    });
+  }
 
   const stats = useMemo(() => {
     const count = (stage: string) => visibleStocks.filter((s) => s.Stage === stage).length;
@@ -427,10 +569,53 @@ function App() {
             <h2>{viewLabel}</h2>
             <span>
               {timeframe === "daily" ? "Daily candles" : "4-hour candles"} · ranked by stage,
-              then setup score · ⚠ = breakout volume below 1.5× average
+              then setup score (click a header to sort) · ⚠ = breakout volume below 1.5× average
             </span>
           </div>
         </div>
+
+        {!loading && visibleStocks.length > 0 && (
+          <div className="filter-bar">
+            <FilterChips
+              label="Stage"
+              options={STAGE_ORDER}
+              counts={stageCounts}
+              selected={stageFilter}
+              onToggle={(v) => setStageFilter((list) => toggleValue(list, v))}
+            />
+            <FilterChips
+              label="Setup"
+              options={["VCP", "Power play"]}
+              counts={setupCounts}
+              selected={setupFilter}
+              onToggle={(v) => setSetupFilter((list) => toggleValue(list, v))}
+            />
+            <FilterChips
+              label="Entry"
+              options={["Cheat", "Low cheat", "Handle"]}
+              counts={entryCounts}
+              selected={entryFilter}
+              onToggle={(v) => setEntryFilter((list) => toggleValue(list, v))}
+            />
+            <div className="filter-group">
+              <span className="filter-label">Pullbacks</span>
+              <button
+                className={`chip ${shakeoutOnly ? "active" : ""}`}
+                onClick={() => setShakeoutOnly((on) => !on)}
+              >
+                Shakeout (SO) <em>{shakeoutCount}</em>
+              </button>
+            </div>
+            {filtersActive && (
+              <button className="chip clear" onClick={clearFilters}>
+                Clear filters
+              </button>
+            )}
+            <span className="filter-count">
+              {tableStocks.length} of {visibleStocks.length}
+            </span>
+          </div>
+        )}
 
         {loading ? (
           <div className="empty">Loading scanner results...</div>
@@ -438,6 +623,8 @@ function App() {
           <div className="empty">
             No stocks match the current filters. Run the scanner first.
           </div>
+        ) : tableStocks.length === 0 ? (
+          <div className="empty">No stocks match the stage / setup filters above.</div>
         ) : (
           <div className="table-scroll">
             <table>
@@ -446,15 +633,15 @@ function App() {
                   <th>Stock</th>
                   <th>Stage</th>
                   <th>Setup</th>
-                  <th>Setup score</th>
+                  <SortHeader label="Setup score" sortKey="setupScore" sort={sort} onSort={toggleSort} />
                   <th>Pivot</th>
-                  <th>From pivot</th>
+                  <SortHeader label="From pivot" sortKey="fromPivot" sort={sort} onSort={toggleSort} />
                   <th>Stop</th>
-                  <th>Risk</th>
+                  <SortHeader label="Risk" sortKey="risk" sort={sort} onSort={toggleSort} />
                   <th>Pullbacks %</th>
                   <th>Base</th>
-                  <th>Trend</th>
-                  <th>RS</th>
+                  <SortHeader label="Trend" sortKey="trend" sort={sort} onSort={toggleSort} />
+                  <SortHeader label="RS" sortKey="rs" sort={sort} onSort={toggleSort} />
                   <th>Price</th>
                   <th>52W high</th>
                   <th>Checklist</th>
@@ -462,7 +649,7 @@ function App() {
                 </tr>
               </thead>
               <tbody>
-                {visibleStocks.map((stock) => (
+                {tableStocks.map((stock) => (
                   <tr key={stock.Symbol}>
                     <td>
                       <div className="stock-name">

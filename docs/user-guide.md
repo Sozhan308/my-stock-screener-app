@@ -62,6 +62,19 @@ Count of stocks in the current view, and how many are **Breakout today**, **Read
 | **52W high** | Distance below the 52-week high |
 | **Checklist** | The nine trend-template rules |
 
+### Sorting and quick filters
+
+These work on the rows already loaded by the controls above and need no new scan.
+
+- **Sort:** click the header of **Setup score**, **From pivot**, **Risk**, **Trend** or **RS**. The first click puts the best value on top (highest score, *lowest* risk); click again to reverse; a third click removes the sort. Rows with no value always stay at the bottom.
+- **Filter chips** above the table (each shows how many stocks it matches; select several to combine):
+  - **Stage** — Breakout, Ready, Recent breakout, Forming, … (only stages present in the current view are shown)
+  - **Setup** — VCP / Power play
+  - **Entry** — Cheat / Low cheat / Handle
+  - **Pullbacks** — *Shakeout (SO)* shows only stocks with a shakeout in the base
+
+  Within a group the chips are OR (Ready *or* Breakout); across groups they are AND (Power play **and** shakeout). **Clear filters** resets them. The counter at the right shows rows shown vs. loaded.
+
 ### Stages
 
 | Stage | Meaning | Typical action |
