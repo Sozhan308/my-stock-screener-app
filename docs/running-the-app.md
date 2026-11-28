@@ -25,7 +25,7 @@ cd ..
 
 The repository already contains:
 
-- `nse_symbols.csv` — the scan universe (~750 NSE symbols). Edit it to change the universe. (`nse_symbols.example.csv` is a 23-symbol list that is handy for a quick test: `uv run minervini scan --symbols-file nse_symbols.example.csv`.)
+- `nse_symbols.csv` — the scan universe: every NSE EQ-series stock (~2,400), refreshed with `uv run minervini update-universe` (the nightly job does this too). Edit it only for a custom universe. (`nse_symbols.example.csv` is a 23-symbol list that is handy for a quick test: `uv run minervini scan --symbols-file nse_symbols.example.csv`.)
 - `output/minervini_daily.csv` and `output/minervini_4h.csv` — the latest results from the nightly GitHub Actions scan, so the dashboard works without running a scan locally.
 - `data/fno_lots.csv` — F&O lot sizes.
 - `data/watchlist.db` — your watchlist.
@@ -77,7 +77,7 @@ make scan-daily               # Daily only
 make scan-4h                  # 4H only
 ```
 
-- **First run:** downloads ~5 years of daily and ~2 years of hourly bars for every symbol into `data/cache/` (git-ignored, ~180 MB for ~750 symbols). Takes about 2–3 minutes.
+- **First run:** downloads ~5 years of daily and ~2 years of hourly bars for every symbol into `data/cache/` (git-ignored, ~320 MB for ~2,400 symbols; hourly bars are fetched only for liquid stocks). Takes about 4–5 minutes; later runs take 1–2 minutes.
 - **Later runs:** only the last few days are downloaded; a full Daily + 4H update takes about a minute.
 - Results are written to `output/`. These files are also updated by the nightly job, so if you run scans locally, discard your local `output/` changes before pulling (`git checkout -- output/`) to avoid merge conflicts. To keep local scans separate, write them elsewhere and point the API at that folder:
 
@@ -96,6 +96,7 @@ Charts do not need a local scan: the first time you open a chart for a symbol, t
 | `TELEGRAM_BOT_TOKEN=… TELEGRAM_CHAT_ID=… uv run minervini notify` | Send the digest from your machine |
 | `uv run minervini journal-check trades.csv` | Replay the setup detector on past `symbol,date` rows (keep personal journals outside the repo) |
 | `uv run minervini update-fno` | Refresh `data/fno_lots.csv` from NSE |
+| `uv run minervini update-universe` | Refresh `nse_symbols.csv` with every NSE EQ-series stock |
 | `make check` | Lint, format check and tests (what CI runs) |
 | `make fix` | Auto-fix lint/format issues, then run tests |
 | `cd frontend && npm run build` | Type-check and build the dashboard |

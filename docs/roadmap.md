@@ -20,7 +20,6 @@
 
 ## Later
 
-- **Universe expansion** — all NSE EQ symbols with the liquidity filter.
 - **Sector / industry strength** — group RS ranking and a column/filter.
 - **Backtesting** — walk-forward detection on history; forward returns, win rate and adverse excursion; tune presets and score weights.
 - **Learning from reviews** — use star/reject decisions as labels to rank setups.

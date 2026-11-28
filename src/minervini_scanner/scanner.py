@@ -61,6 +61,11 @@ class _Analysed:
     traded_value_cr: float
 
 
+def traded_value_cr(daily: pd.DataFrame) -> float:
+    """50-day average traded value in crore rupees."""
+    return float((daily["Close"] * daily["Volume"]).tail(50).mean() / 1e7)
+
+
 def _progress() -> Progress:
     return Progress(
         SpinnerColumn(),
@@ -97,6 +102,15 @@ class Scanner:
             f"{stats.cached:,} already fresh, {stats.failed:,} unavailable"
         )
 
+    def _is_liquid(self, daily: pd.DataFrame) -> bool:
+        closes = daily["Close"].dropna()
+        if closes.empty:
+            return False
+        return bool(
+            traded_value_cr(daily) >= self.config.min_traded_value_cr
+            and float(closes.iloc[-1]) >= self.config.min_price
+        )
+
     def scan(self, symbols: list[str], timeframe: Timeframe) -> list[ScanResult]:
         console.rule("[bold cyan]MINERVINI NSE SCANNER[/bold cyan]")
         console.print(f"  [bold]Timeframe:[/bold] {timeframe.value.upper()}")
@@ -105,8 +119,13 @@ class Scanner:
 
         use_hourly = timeframe is Timeframe.FOUR_HOUR or self.config.hourly_hint
         self._refresh(symbols, "1d", "Updating daily bars")
+
+        # Hourly bars (1H hint and 4H candles) are only fetched for liquid stocks, which keeps
+        # a universe of every NSE equity quick to refresh.
+        liquid = {s for s in symbols if self._is_liquid(self.store.load(s, "1d"))}
+        console.print(f"  Liquid stocks: {len(liquid):,} of {len(symbols):,}")
         if use_hourly:
-            self._refresh(symbols, "1h", "Updating hourly bars")
+            self._refresh([s for s in symbols if s in liquid], "1h", "Updating hourly bars")
 
         presets = DAILY_PRESETS if timeframe is Timeframe.DAILY else FOUR_HOUR_PRESETS
         raw: list[_Analysed] = []
@@ -121,7 +140,9 @@ class Scanner:
             task = progress.add_task("[cyan]Analysing trend and setups", total=len(symbols))
             for symbol in symbols:
                 try:
-                    hourly = self.store.load(symbol, "1h") if use_hourly else None
+                    hourly = (
+                        self.store.load(symbol, "1h") if use_hourly and symbol in liquid else None
+                    )
                     daily = complete_daily_from_hourly(self.store.load(symbol, "1d"), hourly)
                     if len(daily) < 252:
                         skipped += 1
@@ -132,6 +153,9 @@ class Scanner:
 
                     if timeframe is Timeframe.DAILY:
                         tf = daily.copy()
+                    elif hourly is None or hourly.empty:
+                        skipped += 1
+                        continue
                     else:
                         tf = resample_to_4h(hourly)
 
@@ -141,16 +165,14 @@ class Scanner:
 
                     tf = moving_averages(tf)
                     setup = detect_best_setup(tf, presets)
-                    traded_value_cr = float(
-                        (daily["Close"] * daily["Volume"]).tail(50).mean() / 1e7
-                    )
+                    traded_value = traded_value_cr(daily)
                     hourly_setup = (
                         detect_best_setup(hourly, HOURLY_PRESETS)
                         if self.config.hourly_hint and hourly is not None and not hourly.empty
                         else None
                     )
                     raw.append(
-                        _Analysed(symbol, tf, daily, raw_rs, setup, hourly_setup, traded_value_cr)
+                        _Analysed(symbol, tf, daily, raw_rs, setup, hourly_setup, traded_value)
                     )
                 except Exception as exc:
                     skipped += 1
@@ -158,7 +180,11 @@ class Scanner:
                 finally:
                     progress.advance(task)
 
-        ratings = percentile_ratings({item.symbol: item.raw_rs for item in raw})
+        # RS is a percentile within the liquid universe, so adding thin microcaps does not move it.
+        ratings = percentile_ratings(
+            {item.symbol: item.raw_rs for item in raw},
+            reference={item.symbol for item in raw if item.symbol in liquid},
+        )
 
         slope_periods = (
             self.config.slope_daily if timeframe is Timeframe.DAILY else self.config.slope_4h

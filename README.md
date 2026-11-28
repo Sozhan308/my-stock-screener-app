@@ -81,7 +81,7 @@ uv sync --dev
 cd frontend && npm install
 ```
 
-The repository already includes `nse_symbols.csv` (~750 NSE symbols); edit it to customize the screening universe. `nse_symbols.example.csv` is a small list for quick tests (`--symbols-file nse_symbols.example.csv`).
+The repository already includes `nse_symbols.csv` (every NSE EQ-series stock, ~2,400, refreshed nightly with `uv run minervini update-universe`); edit it only for a custom universe. `nse_symbols.example.csv` is a small list for quick tests (`--symbols-file nse_symbols.example.csv`).
 
 See [docs/running-the-app.md](docs/running-the-app.md) for the full step-by-step guide.
 
@@ -158,7 +158,7 @@ The default candidate threshold is:
 
 Therefore, stocks scoring 7/9, 8/9, or 9/9 are shortlisted.
 
-The RS rating is a project-defined universe-relative percentile and is **not** the proprietary IBD RS Rating.
+The RS rating is a project-defined percentile within the liquid universe (50-day average traded value ≥ ₹5 Cr, price ≥ ₹30) and is **not** the proprietary IBD RS Rating.
 
 ## Setup Detection
 

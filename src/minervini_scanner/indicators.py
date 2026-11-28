@@ -34,15 +34,27 @@ def weighted_momentum_score(df: pd.DataFrame) -> float:
     return float(sum(ret * weight for ret, weight in zip(returns, weights, strict=True)))
 
 
-def percentile_ratings(raw_scores: dict[str, float]) -> dict[str, float]:
+def percentile_ratings(
+    raw_scores: dict[str, float],
+    reference: set[str] | None = None,
+) -> dict[str, float]:
+    """Percentile of each score within the ``reference`` symbols (default: all of them).
+
+    A reference group lets thinly traded stocks be rated against the liquid universe without
+    shifting the ratings of the stocks that matter.
+    """
     valid = pd.Series(
         {symbol: score for symbol, score in raw_scores.items() if not np.isnan(score)}
     )
     if valid.empty:
         return {}
 
+    pool = valid[valid.index.isin(reference)] if reference else valid
+    if pool.empty:
+        pool = valid
+
     return {
-        symbol: float((valid <= score).mean() * 100)
+        symbol: float((pool <= score).mean() * 100)
         for symbol, score in raw_scores.items()
         if not np.isnan(score)
     }

@@ -68,6 +68,11 @@ Each entry records the context, the decision and its consequences. Newest decisi
 ### D16 — Nightly scan on weekdays only
 - **Decision:** Cron `30 12 * * 1-5` (18:00 IST, Monday–Friday).
 
+### D17 — Scan every NSE EQ stock; rate RS against liquid stocks only
+- **Context:** The scan covered a fixed list of ~750 symbols, so setups in the rest of the market were never seen.
+- **Decision:** `update-universe` writes every NSE EQ-series symbol (~2,400; BE/BZ series are excluded) to `nse_symbols.csv`, and the nightly job refreshes it. About half pass the liquidity filter (₹5 Cr traded value, price ≥ ₹30). Hourly bars (1H hint, 4H candles) are fetched only for liquid stocks, so illiquid stocks appear in the Daily view only. RS is a percentile within the liquid stocks (illiquid ones are rated against that same distribution), so thin microcaps do not shift the ratings of tradable stocks.
+- **Consequence:** RS values changed versus the 750-stock list (the average liquid stock is now 50). The first run takes ~4–5 minutes; later runs 1–2 minutes.
+
 ## Earlier decisions (before 2026-11-28)
 
 - Python + FastAPI backend, React + TypeScript (Vite) frontend, `uv`, Ruff, pytest, GitHub Actions.

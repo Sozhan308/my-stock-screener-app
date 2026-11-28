@@ -50,10 +50,10 @@ flowchart LR
 
 | Path | In git | Content |
 |---|---|---|
-| `nse_symbols.csv` | yes | Scan universe (`SYMBOL` column) |
+| `nse_symbols.csv` | yes | Scan universe: every NSE EQ-series stock (~2,400), refreshed nightly by `update-universe` |
 | `data/fno_lots.csv` | yes | F&O stocks and nearest-expiry lot size |
 | `data/watchlist.db` | yes | Watchlist (SQLite) |
-| `data/cache/1d/*.parquet`, `data/cache/1h/*.parquet` | no | OHLCV cache (~180 MB for ~750 symbols) |
+| `data/cache/1d/*.parquet`, `data/cache/1h/*.parquet` | no | OHLCV cache (~320 MB for ~2,400 symbols; hourly bars only for liquid stocks) |
 | `output/minervini_{daily,4h}.{csv,xlsx}` | yes | Scan results |
 
 ### Scan result columns

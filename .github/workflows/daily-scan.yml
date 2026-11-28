@@ -46,6 +46,11 @@ jobs:
         continue-on-error: true
         run: uv run minervini update-fno
 
+      # New listings and delistings; the committed list is used if NSE blocks this.
+      - name: Refresh NSE universe
+        continue-on-error: true
+        run: uv run minervini update-universe
+
       - name: Run market scan
         run: uv run minervini update
 
@@ -67,6 +72,7 @@ jobs:
           git add output/minervini_4h.csv
           git add output/minervini_4h.xlsx
           git add data/fno_lots.csv
+          git add nse_symbols.csv
 
           if git diff --cached --quiet; then
             echo "No scan result changes to commit."

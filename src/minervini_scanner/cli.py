@@ -16,6 +16,7 @@ from .notify import DigestFilters, build_digest, send_telegram
 from .scanner import Scanner, ScannerConfig, save_results
 from .setups import SetupResult
 from .store import MarketDataStore, YahooBatchDownloader
+from .universe import download_equity_symbols, save_symbols
 from .watchlist import WatchlistStore
 
 app = typer.Typer(help="Minervini NSE scanner.")
@@ -191,6 +192,19 @@ def update_fno() -> None:
     lots = download_lot_sizes()
     save_lot_sizes(lots, settings.fno_file)
     typer.echo(f"Saved {len(lots)} F&O stocks to {settings.fno_file}")
+
+
+@app.command("update-universe")
+def update_universe(
+    symbols_file: Path = typer.Option(  # noqa: B008
+        Path("nse_symbols.csv"),
+        help="CSV to overwrite with every NSE EQ-series symbol.",
+    ),
+) -> None:
+    """Refresh the scan universe (all NSE EQ-series stocks) from NSE."""
+    symbols = download_equity_symbols()
+    save_symbols(symbols, symbols_file)
+    typer.echo(f"Saved {len(symbols)} NSE EQ symbols to {symbols_file}")
 
 
 def _read_scan(path: Path) -> pd.DataFrame:

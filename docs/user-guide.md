@@ -33,7 +33,7 @@ See [Running the app](running-the-app.md) for first-time setup, running scans lo
 | **Daily / 4H** | Which candle timeframe the table is based on | Daily |
 | **Actionable setups / All setups / All stocks** | *Actionable* = Breakout, Ready, Recent breakout. *All setups* adds Forming, Extended and Failed. *All stocks* shows everything that passes the other filters | Actionable setups |
 | **Minimum score** | Minimum Minervini trend-template score (0–9) | 7/9 |
-| **RS ≥** | Minimum universe-relative RS rating | 60 |
+| **RS ≥** | Minimum RS rating (percentile among liquid stocks) | 60 |
 | **Setup score ≥** | Minimum setup score (0–100) | 0 |
 | **Liquid only** | 50-day average traded value ≥ ₹5 Cr and price ≥ ₹30 | On |
 | **Search** | Filter by symbol (press Enter) | — |
@@ -58,7 +58,7 @@ Count of stocks in the current view, and how many are **Breakout today**, **Read
 | **Pullbacks %** | Depth of each contraction in the base, oldest first. **SO** = a shakeout in the tightening part of the base |
 | **Base** | Base length in bars and its depth from the left-side high |
 | **Trend** | Trend-template score (x/9) |
-| **RS** | Universe-relative RS rating (not the IBD rating; values differ from TradingView indicators) |
+| **RS** | RS rating: percentile among liquid stocks (not the IBD rating; values differ from TradingView indicators) |
 | **52W high** | Distance below the 52-week high |
 | **Checklist** | The nine trend-template rules |
 
@@ -155,5 +155,5 @@ Click the ☆ next to a symbol to save it. The watchlist is stored in `data/watc
 | Table says "No stocks match" | Run `make update` or `git pull` to get scan results; relax filters |
 | Chart shows "No price data" | Symbol unknown to Yahoo or no network on first load |
 | Daily values differ slightly from TradingView | Yahoo data; the latest daily bar is sometimes published late and is rebuilt from hourly bars (volume is estimated) |
-| RS differs from the TradingView indicator | Different formula; this RS is a percentile within the scanned universe |
+| RS differs from the TradingView indicator | Different formula; this RS is a percentile within the liquid stocks of the scanned universe |
 | 4H data missing for a recent IPO | Yahoo serves only ~1 year of hourly bars for those; the cache grows over time |
