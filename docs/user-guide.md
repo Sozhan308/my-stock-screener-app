@@ -18,17 +18,11 @@ Instead of opening every trend-template stock to check for a compression by eye,
 
 ```bash
 git pull                      # latest scan results (output/*.csv) and F&O list
-uv run minervini api          # backend on http://127.0.0.1:8000
-cd frontend && npm run dev    # dashboard on http://127.0.0.1:5173
+uv run minervini api          # terminal 1: backend on http://127.0.0.1:8000
+cd frontend && npm run dev    # terminal 2: dashboard on http://localhost:5173
 ```
 
-The first time a chart is opened for a symbol the backend downloads its history (about a second); after that it is cached under `data/cache/`.
-
-To run the scans yourself instead of waiting for GitHub Actions:
-
-```bash
-make update                   # Daily + 4H (about a minute with a warm cache)
-```
+See [Running the app](running-the-app.md) for first-time setup, running scans locally, configuration and troubleshooting.
 
 ## 2. The dashboard
 

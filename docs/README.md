@@ -2,6 +2,7 @@
 
 | Document | What it covers |
 |---|---|
+| [Running the app](running-the-app.md) | Setup, starting the backend and dashboard, running scans, configuration, troubleshooting |
 | [User guide](user-guide.md) | Daily routine, every screen element, the chart, Telegram digest, watchlist, commands |
 | [Setup detection](setup-detection.md) | How rally → contraction → breakout setups are detected, presets, stages, scoring, validation |
 | [Architecture](architecture.md) | Components, data flow, modules, data files, API, CLI, automation |

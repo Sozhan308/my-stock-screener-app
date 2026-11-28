@@ -6,7 +6,7 @@ The scanner analyzes Daily and 4H market data, identifies stocks that satisfy th
 
 > This project is for research and screening purposes only. It is not investment advice.
 
-📚 **Documentation:** [user guide](docs/user-guide.md) · [setup detection](docs/setup-detection.md) · [architecture](docs/architecture.md) · [decisions](docs/decisions.md) · [roadmap](docs/roadmap.md)
+📚 **Documentation:** [running the app](docs/running-the-app.md) · [user guide](docs/user-guide.md) · [setup detection](docs/setup-detection.md) · [architecture](docs/architecture.md) · [decisions](docs/decisions.md) · [roadmap](docs/roadmap.md)
 
 ## Features
 
@@ -69,24 +69,21 @@ The scanner analyzes Daily and 4H market data, identifies stocks that satisfy th
 
 - Python 3.12+
 - uv
-- Node.js 20+
+- Node.js 20.19+ or 22.12+
 - npm
 
 ### Install
 
-Clone the repository and install the Python dependencies:
+Clone the repository and install the dependencies:
 
 ```bash
 uv sync --dev
+cd frontend && npm install
 ```
 
-Create the NSE symbol list:
+The repository already includes `nse_symbols.csv` (~750 NSE symbols); edit it to customize the screening universe. `nse_symbols.example.csv` is a small list for quick tests (`--symbols-file nse_symbols.example.csv`).
 
-```bash
-cp nse_symbols.example.csv nse_symbols.csv
-```
-
-Edit `nse_symbols.csv` if you want to customize the screening universe.
+See [docs/running-the-app.md](docs/running-the-app.md) for the full step-by-step guide.
 
 ## Run the Scanner
 
@@ -128,14 +125,13 @@ Then start the frontend in another terminal:
 
 ```bash
 cd frontend
-npm install
 npm run dev
 ```
 
 Open:
 
 ```text
-http://127.0.0.1:5173
+http://localhost:5173
 ```
 
 The React frontend communicates with the FastAPI backend and allows filters such as minimum score and RS rating to be changed without rerunning the market-data download.
