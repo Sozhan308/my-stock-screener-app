@@ -14,7 +14,7 @@ from rich.progress import (
     TimeRemainingColumn,
 )
 
-from .data import YahooFinanceProvider, resample_to_4h
+from .data import complete_daily_from_hourly, resample_to_4h
 from .indicators import (
     daily_52_week_levels,
     moving_averages,
@@ -23,6 +23,17 @@ from .indicators import (
 )
 from .models import ScanResult, Timeframe
 from .rules import build_result_frame
+from .setups import (
+    ACTIONABLE_STAGES,
+    DAILY_PRESETS,
+    FOUR_HOUR_PRESETS,
+    HOURLY_PRESETS,
+    STAGE_PRIORITY,
+    SetupResult,
+    Stage,
+    detect_best_setup,
+)
+from .store import MarketDataStore
 
 console = Console()
 
@@ -33,16 +44,58 @@ class ScannerConfig:
     min_score: int = 7
     slope_daily: int = 22
     slope_4h: int = 33
+    min_traded_value_cr: float = 5.0
+    min_price: float = 30.0
+    # Also run the 1H power-play check (needs hourly bars) and report it as a hint.
+    hourly_hint: bool = True
+
+
+@dataclass
+class _Analysed:
+    symbol: str
+    tf: pd.DataFrame
+    daily: pd.DataFrame
+    raw_rs: float
+    setup: SetupResult
+    hourly_setup: SetupResult | None
+    traded_value_cr: float
+
+
+def _progress() -> Progress:
+    return Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        BarColumn(),
+        MofNCompleteColumn(),
+        TimeRemainingColumn(),
+        console=console,
+    )
 
 
 class Scanner:
     def __init__(
         self,
-        provider: YahooFinanceProvider | None = None,
+        store: MarketDataStore,
         config: ScannerConfig | None = None,
+        lot_sizes: dict[str, int] | None = None,
     ) -> None:
-        self.provider = provider or YahooFinanceProvider()
+        self.store = store
         self.config = config or ScannerConfig()
+        self.lot_sizes = lot_sizes or {}
+
+    def _refresh(self, symbols: list[str], interval: str, label: str) -> None:
+        with _progress() as progress:
+            task = progress.add_task(f"[cyan]{label}", total=len(symbols))
+            stats = self.store.refresh(
+                symbols,
+                interval,
+                on_progress=lambda count: progress.advance(task, count),
+            )
+            progress.update(task, completed=len(symbols))
+        console.print(
+            f"  {interval}: {stats.incremental:,} updated, {stats.full:,} full downloads, "
+            f"{stats.cached:,} already fresh, {stats.failed:,} unavailable"
+        )
 
     def scan(self, symbols: list[str], timeframe: Timeframe) -> list[ScanResult]:
         console.rule("[bold cyan]MINERVINI NSE SCANNER[/bold cyan]")
@@ -50,7 +103,13 @@ class Scanner:
         console.print(f"  [bold]Universe:[/bold] {len(symbols):,} symbols")
         console.print()
 
-        raw: list[tuple[str, pd.DataFrame, pd.DataFrame, float]] = []
+        use_hourly = timeframe is Timeframe.FOUR_HOUR or self.config.hourly_hint
+        self._refresh(symbols, "1d", "Updating daily bars")
+        if use_hourly:
+            self._refresh(symbols, "1h", "Updating hourly bars")
+
+        presets = DAILY_PRESETS if timeframe is Timeframe.DAILY else FOUR_HOUR_PRESETS
+        raw: list[_Analysed] = []
         skipped = 0
         min_periods = (
             200 + self.config.slope_4h
@@ -58,25 +117,12 @@ class Scanner:
             else 200 + self.config.slope_daily
         )
 
-        with Progress(
-            SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
-            BarColumn(),
-            MofNCompleteColumn(),
-            TimeRemainingColumn(),
-            console=console,
-        ) as progress:
-            task = progress.add_task(
-                "[cyan]Downloading market data",
-                total=len(symbols),
-            )
+        with _progress() as progress:
+            task = progress.add_task("[cyan]Analysing trend and setups", total=len(symbols))
             for symbol in symbols:
                 try:
-                    progress.update(
-                        task,
-                        description=f"[cyan]Downloading {symbol}",
-                    )
-                    daily = self.provider.daily(symbol)
+                    hourly = self.store.load(symbol, "1h") if use_hourly else None
+                    daily = complete_daily_from_hourly(self.store.load(symbol, "1d"), hourly)
                     if len(daily) < 252:
                         skipped += 1
                         continue
@@ -87,7 +133,6 @@ class Scanner:
                     if timeframe is Timeframe.DAILY:
                         tf = daily.copy()
                     else:
-                        hourly = self.provider.hourly(symbol)
                         tf = resample_to_4h(hourly)
 
                     if len(tf) < min_periods:
@@ -95,81 +140,151 @@ class Scanner:
                         continue
 
                     tf = moving_averages(tf)
-                    raw.append((symbol, tf, daily, raw_rs))
+                    setup = detect_best_setup(tf, presets)
+                    traded_value_cr = float(
+                        (daily["Close"] * daily["Volume"]).tail(50).mean() / 1e7
+                    )
+                    hourly_setup = (
+                        detect_best_setup(hourly, HOURLY_PRESETS)
+                        if self.config.hourly_hint and hourly is not None and not hourly.empty
+                        else None
+                    )
+                    raw.append(
+                        _Analysed(symbol, tf, daily, raw_rs, setup, hourly_setup, traded_value_cr)
+                    )
                 except Exception as exc:
                     skipped += 1
                     console.print(f"[yellow]Warning:[/yellow] {symbol}: {exc}")
                 finally:
                     progress.advance(task)
 
-        console.print()
-        console.rule("[bold cyan]CALCULATING RELATIVE STRENGTH[/bold cyan]")
-        ratings = percentile_ratings({symbol: raw_rs for symbol, _, _, raw_rs in raw})
+        ratings = percentile_ratings({item.symbol: item.raw_rs for item in raw})
 
         slope_periods = (
             self.config.slope_daily if timeframe is Timeframe.DAILY else self.config.slope_4h
         )
 
         results: list[ScanResult] = []
-        with Progress(
-            SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
-            BarColumn(),
-            MofNCompleteColumn(),
-            TimeRemainingColumn(),
-            console=console,
-        ) as progress:
-            task = progress.add_task("[cyan]Applying Minervini rules", total=len(raw))
-            for symbol, tf, daily, _ in raw:
-                rs_rating = ratings.get(symbol, 0.0)
-                result = build_result_frame(
-                    tf,
-                    daily,
-                    rs_rating,
-                    self.config.rs_threshold,
-                    slope_periods,
+        for item in raw:
+            rs_rating = ratings.get(item.symbol, 0.0)
+            result = build_result_frame(
+                item.tf,
+                item.daily,
+                rs_rating,
+                self.config.rs_threshold,
+                slope_periods,
+            )
+            results.append(
+                ScanResult(
+                    symbol=item.symbol,
+                    price=result["price"],
+                    ma50=result["ma50"],
+                    ma150=result["ma150"],
+                    ma200=result["ma200"],
+                    ma200_slope_pct=result["ma200_slope_pct"],
+                    high_52w=result["high_52w"],
+                    low_52w=result["low_52w"],
+                    pct_above_52w_low=result["pct_above_52w_low"],
+                    pct_below_52w_high=result["pct_below_52w_high"],
+                    rs_rating=rs_rating,
+                    checklist=result["checklist"],
+                    timeframe=timeframe,
+                    setup=item.setup,
+                    avg_traded_value_cr=item.traded_value_cr,
+                    hourly_setup=item.hourly_setup,
+                    lot_size=self.lot_sizes.get(item.symbol),
                 )
-                results.append(
-                    ScanResult(
-                        symbol=symbol,
-                        price=result["price"],
-                        ma50=result["ma50"],
-                        ma150=result["ma150"],
-                        ma200=result["ma200"],
-                        ma200_slope_pct=result["ma200_slope_pct"],
-                        high_52w=result["high_52w"],
-                        low_52w=result["low_52w"],
-                        pct_above_52w_low=result["pct_above_52w_low"],
-                        pct_below_52w_high=result["pct_below_52w_high"],
-                        rs_rating=rs_rating,
-                        checklist=result["checklist"],
-                        timeframe=timeframe,
-                    )
-                )
-                progress.advance(task)
+            )
 
-        results.sort(key=lambda item: (item.score, item.rs_rating), reverse=True)
-        nine = sum(result.score == 9 for result in results)
-        eight = sum(result.score == 8 for result in results)
-        seven = sum(result.score == 7 for result in results)
-        shortlisted = sum(result.score >= self.config.min_score for result in results)
+        results.sort(
+            key=lambda item: (
+                STAGE_PRIORITY[item.setup.stage],
+                -item.setup.score,
+                -item.score,
+                -item.rs_rating,
+            )
+        )
+        shortlisted = [result for result in results if result.score >= self.config.min_score]
+        actionable = [result for result in shortlisted if result.setup.stage in ACTIONABLE_STAGES]
+
+        def count(stage: Stage) -> int:
+            return sum(result.setup.stage is stage for result in shortlisted)
 
         console.print()
         console.rule("[bold green]SCAN COMPLETE[/bold green]")
         console.print(f"  Stocks scanned       : [bold]{len(symbols):,}[/bold]")
         console.print(f"  Valid results        : [bold]{len(results):,}[/bold]")
         console.print(f"  Skipped / invalid    : [bold]{skipped:,}[/bold]")
-        console.print(f"  [green]9/9 candidates       : {nine:,}[/green]")
-        console.print(f"  [green]8/9 candidates       : {eight:,}[/green]")
-        console.print(f"  [yellow]7/9 candidates       : {seven:,}[/yellow]")
         console.print(
-            f"  [bold cyan]Shortlisted (>={self.config.min_score}/9) : {shortlisted:,}[/bold cyan]"
+            f"  [bold cyan]Trend template (>={self.config.min_score}/9) : "
+            f"{len(shortlisted):,}[/bold cyan]"
         )
+        console.print(f"  [green]  Breakout today     : {count(Stage.BREAKOUT):,}[/green]")
+        console.print(f"  [green]  Ready (near pivot) : {count(Stage.READY):,}[/green]")
+        console.print(f"  [green]  Recent breakout    : {count(Stage.RECENT_BREAKOUT):,}[/green]")
+        console.print(f"  [yellow]  Forming            : {count(Stage.FORMING):,}[/yellow]")
+        console.print(f"  [bold green]Actionable setups    : {len(actionable):,}[/bold green]")
         console.print()
         return results
 
 
-def results_to_frame(results: list[ScanResult]) -> pd.DataFrame:
+def _date(value: pd.Timestamp | None) -> str | None:
+    if value is None:
+        return None
+    if value.tzinfo is not None:
+        value = value.tz_convert("Asia/Kolkata")
+    if value.hour == 0 and value.minute == 0:
+        return value.strftime("%Y-%m-%d")
+    return value.strftime("%Y-%m-%d %H:%M")
+
+
+def _round(value: float | None, digits: int = 2) -> float | None:
+    return None if value is None else round(float(value), digits)
+
+
+def setup_columns(setup: SetupResult) -> dict:
+    base = setup.base
+    shakeout = base.shakeout if base else None
+    return {
+        "Stage": setup.stage.value,
+        "Setup": setup.setup_type,
+        "Setup Score": setup.score,
+        "Pivot": _round(base.pivot) if base else None,
+        "Stop": _round(base.stop) if base else None,
+        "Risk %": _round(setup.risk_pct),
+        "% From Pivot": _round(setup.pct_from_pivot),
+        "Entry Zone": base.entry_zone.value if base else None,
+        "Base Start": _date(base.start_date) if base else None,
+        "Base Bars": base.bars if base else None,
+        "Base Depth %": _round(base.depth_pct) if base else None,
+        "Prior Rally %": _round(base.rally_pct, 1) if base else None,
+        "Contractions": (
+            " / ".join(f"{c.depth_pct:.1f}" for c in base.contractions) if base else None
+        ),
+        "Shakeout": _date(shakeout.low_date) if shakeout else None,
+        "Volume Dry-up": _round(setup.volume_dryup),
+        "Tightness %": _round(setup.tightness_pct),
+        "Breakout Date": _date(setup.breakout_date),
+        "Breakout Volume x": _round(setup.breakout_volume_ratio),
+        "Setup Notes": "; ".join(setup.notes) or None,
+    }
+
+
+def hourly_columns(setup: SetupResult | None) -> dict:
+    base = setup.base if setup else None
+    return {
+        "1H Stage": setup.stage.value if setup else None,
+        "1H Pivot": _round(base.pivot) if base else None,
+        "1H % From Pivot": _round(setup.pct_from_pivot) if setup else None,
+        "1H Setup Score": setup.score if setup and base else None,
+    }
+
+
+def results_to_frame(
+    results: list[ScanResult],
+    config: ScannerConfig | None = None,
+) -> pd.DataFrame:
+    config = config or ScannerConfig()
     rows = []
 
     for item in results:
@@ -198,6 +313,15 @@ def results_to_frame(results: list[ScanResult]) -> pd.DataFrame:
                 "25% Above 52W Low": item.checklist.above_52w_low_25,
                 "Within 25% 52W High": item.checklist.within_25pct_52w_high,
                 "RS > Threshold": item.checklist.rs_above_threshold,
+                **setup_columns(item.setup),
+                **hourly_columns(item.hourly_setup),
+                "F&O": item.lot_size is not None,
+                "Lot Size": item.lot_size,
+                "Avg Value (Cr)": round(item.avg_traded_value_cr, 2),
+                "Liquid": (
+                    item.avg_traded_value_cr >= config.min_traded_value_cr
+                    and item.price >= config.min_price
+                ),
             }
         )
 
@@ -208,10 +332,11 @@ def save_results(
     results: list[ScanResult],
     output_dir: Path,
     timeframe: Timeframe,
+    config: ScannerConfig | None = None,
 ) -> tuple[Path, Path]:
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    df = results_to_frame(results)
+    df = results_to_frame(results, config)
 
     csv_path = output_dir / f"minervini_{timeframe.value}.csv"
     xlsx_path = output_dir / f"minervini_{timeframe.value}.xlsx"

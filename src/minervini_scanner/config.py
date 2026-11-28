@@ -8,10 +8,14 @@ class Settings(BaseSettings):
     data_dir: Path = Path("data/cache")
     output_dir: Path = Path("output")
     watchlist_db: Path = Path("data/watchlist.db")
+    fno_file: Path = Path("data/fno_lots.csv")
     default_timeframe: str = "daily"
     rs_threshold: float = 70.0
     min_score: int = 7
-    request_delay: float = 0.15
+    # Pause between batched Yahoo Finance requests (seconds).
+    request_delay: float = 0.5
+    min_traded_value_cr: float = 5.0
+    min_price: float = 30.0
 
     model_config = SettingsConfigDict(
         env_file=".env",

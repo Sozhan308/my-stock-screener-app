@@ -1,6 +1,8 @@
 from dataclasses import dataclass
 from enum import StrEnum
 
+from .setups import SetupResult
+
 
 class Timeframe(StrEnum):
     DAILY = "daily"
@@ -51,6 +53,10 @@ class ScanResult:
     rs_rating: float
     checklist: Checklist
     timeframe: Timeframe
+    setup: SetupResult
+    avg_traded_value_cr: float
+    hourly_setup: SetupResult | None = None
+    lot_size: int | None = None
 
     @property
     def score(self) -> int:

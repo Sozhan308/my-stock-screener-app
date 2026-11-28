@@ -2,8 +2,8 @@ name: Stock Market Scan
 
 on:
   schedule:
-    # Every day at 18:00 IST = 12:30 UTC
-    - cron: "30 12 * * *"
+    # Weekdays at 18:00 IST = 12:30 UTC
+    - cron: "30 12 * * 1-5"
 
   # Allows manual execution from GitHub Actions
   workflow_dispatch:
@@ -32,7 +32,21 @@ jobs:
       - name: Install dependencies
         run: uv sync
 
-      - name: Run weekly market scan
+      # Cached OHLCV bars let each run download only the latest few days.
+      - name: Restore market-data cache
+        uses: actions/cache@v4
+        with:
+          path: data/cache
+          key: ohlcv-${{ runner.os }}-${{ github.run_id }}
+          restore-keys: |
+            ohlcv-${{ runner.os }}-
+
+      # NSE occasionally blocks cloud IPs; the committed snapshot is used if this fails.
+      - name: Refresh F&O lot sizes
+        continue-on-error: true
+        run: uv run minervini update-fno
+
+      - name: Run market scan
         run: uv run minervini update
 
       - name: Check generated output
@@ -52,6 +66,7 @@ jobs:
           git add output/minervini_daily.xlsx
           git add output/minervini_4h.csv
           git add output/minervini_4h.xlsx
+          git add data/fno_lots.csv
 
           if git diff --cached --quiet; then
             echo "No scan result changes to commit."
@@ -63,3 +78,10 @@ jobs:
           git rebase origin/main
 
           git push origin main
+
+      - name: Send Telegram digest
+        continue-on-error: true
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: uv run minervini notify

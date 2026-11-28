@@ -1,16 +1,24 @@
 # My Stock Screener
 
-A Python + FastAPI + React/TypeScript application for screening NSE equities using a configurable implementation of the Minervini Trend Template.
+A Python + FastAPI + React/TypeScript application for screening NSE equities using a configurable implementation of the Minervini Trend Template, plus automatic detection of rally → contraction (VCP / Power play) → breakout setups.
 
-The scanner analyzes Daily and 4H market data and identifies stocks that satisfy the configured technical criteria.
+The scanner analyzes Daily and 4H market data, identifies stocks that satisfy the trend criteria, and classifies each stock's setup stage (Forming, Ready, Breakout, ...) with a pivot, stop and setup score so that only actionable charts need a manual review.
 
 > This project is for research and screening purposes only. It is not investment advice.
+
+📚 **Documentation:** [user guide](docs/user-guide.md) · [setup detection](docs/setup-detection.md) · [architecture](docs/architecture.md) · [decisions](docs/decisions.md) · [roadmap](docs/roadmap.md)
 
 ## Features
 
 - NSE equity screening
 - Daily and 4H timeframes
 - Minervini Trend Template checklist
+- VCP and Power play setup detection with pivot, stop, risk and setup score
+- Shakeout (undercut and reclaim) detection
+- 1H power-play hint
+- Annotated in-app chart (base, contractions, pivot, stop, breakout)
+- F&O tag with lot size
+- Liquidity flag (average traded value and price)
 - Configurable minimum score
 - Relative Strength (RS) ranking
 - Moving-average analysis
@@ -21,6 +29,9 @@ The scanner analyzes Daily and 4H market data and identifies stocks that satisfy
 - Personal watchlist
 - TradingView chart links
 - CSV and Excel exports
+- Local OHLCV cache with incremental, batched downloads
+- Journal check: replay the detector on past trade dates
+- Telegram evening digest
 - Automated daily market-data refresh
 - GitHub Actions CI
 
@@ -32,6 +43,7 @@ The scanner analyzes Daily and 4H market data and identifies stocks that satisfy
 - FastAPI
 - Pandas / NumPy
 - yfinance
+- PyArrow (Parquet cache)
 - Typer
 - Rich
 
@@ -41,6 +53,7 @@ The scanner analyzes Daily and 4H market data and identifies stocks that satisfy
 - TypeScript
 - Vite
 - Lucide React
+- TradingView Lightweight Charts
 
 ### Development & Tooling
 
@@ -90,6 +103,8 @@ uv run minervini scan --timeframe 4h
 ```
 
 The scanner displays progress while downloading market data and evaluating the screening rules.
+
+Daily and hourly bars are cached as Parquet files under `data/cache/` (git-ignored). The first run downloads the full history (5 years daily, ~2 years hourly); later runs only download the last few days in batches. If Yahoo re-adjusts history (splits, dividends), the affected symbol is re-downloaded automatically.
 
 Results are written to:
 
@@ -149,6 +164,26 @@ Therefore, stocks scoring 7/9, 8/9, or 9/9 are shortlisted.
 
 The RS rating is a project-defined universe-relative percentile and is **not** the proprietary IBD RS Rating.
 
+## Setup Detection
+
+Every stock is also checked for a rally → contraction → breakout setup, with timeframe-specific presets (Daily VCP, Daily Power play, 4H VCP and a 1H power-play hint). Each stock gets a stage (Breakout, Ready, Recent breakout, Forming, Extended, Failed, No base), a pivot, a stop, a risk %, the contraction depths, shakeouts and a 0–100 setup score. The dashboard defaults to *Actionable setups* ranked by stage and setup score, and the stock popup shows an annotated chart of the base.
+
+See [docs/setup-detection.md](docs/setup-detection.md) for the algorithm, presets, stages, scoring and validation, and [docs/user-guide.md](docs/user-guide.md) for how to use it.
+
+To check the detector against your own past trades (CSV with `symbol` and `date` columns; keep personal journals out of the repository):
+
+```bash
+uv run minervini journal-check trades.csv
+```
+
+## Telegram Digest
+
+After the nightly scan, GitHub Actions sends a digest (breakouts, top Ready setups, 4H setups, watchlist alerts) to Telegram when the repository secrets `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` are set. Preview it locally with:
+
+```bash
+uv run minervini notify --dry-run
+```
+
 ## Development
 
 Install development dependencies:
@@ -197,9 +232,11 @@ GitHub Actions provides:
 - Automated tests
 - Daily market-data refresh
 - Daily + 4H scan generation
-- Automatic update of scan results
+- Automatic update of scan results and the F&O lot-size list
+- Telegram digest
+- Market-data cache between runs (`actions/cache`)
 
-The automated market scan runs in the evening and commits updated results to the repository.
+The automated market scan runs on weekday evenings (18:00 IST) and commits updated results to the repository.
 
 ## Data
 

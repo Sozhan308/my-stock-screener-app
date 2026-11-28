@@ -1,10 +1,8 @@
 from __future__ import annotations
 
-import time
 from pathlib import Path
 
 import pandas as pd
-import yfinance as yf
 
 
 def load_symbols(path: Path) -> list[str]:
@@ -17,43 +15,6 @@ def load_symbols(path: Path) -> list[str]:
         raise ValueError("Symbol CSV must contain a SYMBOL column")
 
     return df[column].dropna().astype(str).str.strip().str.upper().drop_duplicates().tolist()
-
-
-class YahooFinanceProvider:
-    def __init__(self, request_delay: float = 0.15) -> None:
-        self.request_delay = request_delay
-
-    def daily(self, symbol: str) -> pd.DataFrame:
-        return self._download(symbol, period="3y", interval="1d")
-
-    def hourly(self, symbol: str) -> pd.DataFrame:
-        return self._download(symbol, period="2y", interval="1h")
-
-    def _download(
-        self,
-        symbol: str,
-        *,
-        period: str,
-        interval: str,
-    ) -> pd.DataFrame:
-        time.sleep(self.request_delay)
-
-        df = yf.download(
-            f"{symbol}.NS",
-            period=period,
-            interval=interval,
-            auto_adjust=True,
-            progress=False,
-            threads=False,
-        )
-
-        if df.empty:
-            return df
-
-        if isinstance(df.columns, pd.MultiIndex):
-            df.columns = df.columns.get_level_values(0)
-
-        return df[["Open", "High", "Low", "Close", "Volume"]].dropna(subset=["Close"])
 
 
 def resample_to_4h(hourly: pd.DataFrame) -> pd.DataFrame:
@@ -87,3 +48,38 @@ def resample_to_4h(hourly: pd.DataFrame) -> pd.DataFrame:
     )
 
     return result[(result.index.hour >= 9) & (result.index.hour <= 13)]
+
+
+def complete_daily_from_hourly(daily: pd.DataFrame, hourly: pd.DataFrame | None) -> pd.DataFrame:
+    """Append sessions present in hourly bars but missing from daily bars.
+
+    Yahoo often publishes the latest NSE daily bar late (prices empty, volume present), while the
+    hourly bars for that session are already complete.
+    """
+    if hourly is None or hourly.empty:
+        return daily
+
+    index = pd.to_datetime(hourly.index)
+    if index.tz is not None:
+        index = index.tz_convert("Asia/Kolkata").tz_localize(None)
+    bars = hourly.set_axis(index)
+    bars = bars[bars.index.dayofweek < 5]
+
+    sessions = bars.groupby(bars.index.normalize()).agg(
+        {"Open": "first", "High": "max", "Low": "min", "Close": "last", "Volume": "sum"}
+    )
+    sessions.index.name = daily.index.name
+    if daily.empty:
+        return sessions
+
+    missing = sessions[sessions.index > daily.index[-1]].copy()
+    if missing.empty:
+        return daily
+
+    # Hourly bars miss auction/block volume (~25%), so rescale by this stock's recent ratio.
+    common = daily.index.intersection(sessions.index)[-20:]
+    hourly_share = (sessions.loc[common, "Volume"] / daily.loc[common, "Volume"]).median()
+    if pd.notna(hourly_share) and 0 < hourly_share <= 1:
+        missing["Volume"] = missing["Volume"] / hourly_share
+
+    return pd.concat([daily, missing[daily.columns.intersection(missing.columns)]])
