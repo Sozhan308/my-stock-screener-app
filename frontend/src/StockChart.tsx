@@ -270,7 +270,16 @@ function drawChart(container: HTMLElement, data: ChartData) {
 
   markers.sort((a, b) => order(a.time as ChartTime) - order(b.time as ChartTime));
   createSeriesMarkers(candles, markers);
-  chart.timeScale().fitContent();
+  // Open zoomed on the base (plus some lead-in); older history stays reachable by scrolling.
+  const total = data.candles.length;
+  const baseIndex = data.setup.base
+    ? data.candles.findIndex((c) => c.time === data.setup.base!.start)
+    : -1;
+  const visible = baseIndex >= 0 ? Math.max(60, Math.round((total - baseIndex) * 1.6)) : 120;
+  chart.timeScale().setVisibleLogicalRange({
+    from: Math.max(0, total - visible),
+    to: total - 1 + 6,
+  });
   return chart;
 }
 

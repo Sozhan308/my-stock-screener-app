@@ -301,6 +301,7 @@ td a {
 
 .modal-backdrop {
   position: fixed;
+  z-index: 100;
   inset: 0;
   display: flex;
   align-items: center;
