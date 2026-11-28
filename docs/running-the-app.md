@@ -131,6 +131,7 @@ MINERVINI_REQUEST_DELAY=0.5      # pause between Yahoo download batches (seconds
 |---|---|
 | `http://127.0.0.1:5173` does not load | Use `http://localhost:5173` |
 | Dashboard shows "No stocks match the current filters" | Run `git pull` (or `make update`); relax filters or switch to *All stocks* |
+| Everything shows 0 although `data/cache/` is full | The dashboard reads the scan results in `output/*.csv`, **not** the cache. The cache is only the raw price history the scanner reads. If the CSVs are missing or were made by an older version (no `Stage`/`Setup` columns), run `make update` (about a minute with a warm cache), then click **Refresh** |
 | Dashboard loads but data never appears | The backend is not running — start `uv run minervini api` |
 | `Address already in use` (port 8000 or 5173) | Another instance is running; stop it (`lsof -i :8000` to find the PID, then `kill <PID>`), or use `uv run minervini api --port 8001` and update `frontend/vite.config.ts` |
 | Chart says "No price data" | No network on first load for that symbol, or the symbol is unknown to Yahoo |
